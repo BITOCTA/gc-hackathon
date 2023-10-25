@@ -1,49 +1,47 @@
 const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
-const {PubSub, Message} = require('@google-cloud/pubsub');
+const { PubSub } = require('@google-cloud/pubsub');
+
+const projectId = 'cloud-summit-waw23-1483';
+const topicNameOrId = 'projects/cloud-summit-waw23-1483/topics/telemetry-data';
 
 
-// Middleware to parse JSON requests
+const pubsub = new PubSub({ projectId});
+const topic = pubsub.topic(topicNameOrId);
+
 app.use(express.json());
 
-// Define a route to accept events (POST request)
 app.post('/events', async (req, res) => {
-  const eventData = req.body; // Assuming event data is sent in the request body
+  const eventData = req.body;
+
   console.log('Received event:', eventData);
 
-  await sendEvent(eventData, res)
-
-    console.log("gsgs")
-
-
-  res.status(200)
-
-
+  try {
+    await sendEvent(eventData);
+    console.log("Event sent successfully to Pub/Sub");
+    res.status(200).send('Event processed successfully');
+  } catch (error) {
+    console.error('Failed to send event:', error);
+    res.status(500).send('Failed to process event');
+  }
 });
 
-// Start the server
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
 
-async function sendEvent(
-  event,
-  res,
-  projectId = 'cloud-summit-waw23-1483',
-  topicNameOrId = 'projects/cloud-summit-waw23-1483/topics/telemetry-data', // Name for the new topic to create
-) {
-  // Instantiates a client
-  const pubsub = new PubSub({projectId});
+const publishMessage = (message) => {
+    return new Promise((resolve, reject) => {
+      topic.publishMessage(message, (err, messageId) => {
+        if (err) reject(err);
+        else resolve(messageId);
+      });
+    });
+  };
 
-  // Creates a new topic
-  const topic = pubsub.topic(topicNameOrId);
-
-
-
-  topic.publishMessage({data: Buffer.from(JSON.stringify(event))}, () => {
-    console.log("message sent successfully")
-  });
-
+async function sendEvent(event) {
+  const messageId = await publishMessage({ data: Buffer.from(JSON.stringify(event)) });
+  console.log(`Message ${messageId} sent successfully`);
 }
 
